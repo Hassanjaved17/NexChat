@@ -2,7 +2,7 @@
 
 A full-stack real-time chat app built with React and Firebase Realtime Database. Create or join rooms, chat instantly, and see who's online — all in real time.
 
-🔗 **Live Demo:** [Coming Soon]
+🔗 **Live Demo:** [nexchat-live.vercel.app](https://nexchat-live.vercel.app)
 
 ---
 
