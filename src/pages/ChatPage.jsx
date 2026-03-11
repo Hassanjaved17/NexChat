@@ -1,3 +1,4 @@
+
 const ChatPage = () => {
   return (
     <div className="min-h-screen bg-[#0a0812] flex items-center justify-center">
