@@ -22,7 +22,7 @@ export const GLOBAL_ROOM = {
 
 const useRooms = (user) => {
   const [rooms, setRooms]       = useState([GLOBAL_ROOM]);
-  const [loading, setLoading]   = useState(false);
+  const [loading]   = useState(false);
 
   // ── Listen to all rooms ───────────────────────────────────
   useEffect(() => {
