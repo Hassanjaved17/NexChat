@@ -5,3 +5,22 @@
   overflow-x: hidden;
   scrollbar-gutter: stable;
 }
+
+
+/* Messages scrollbar */
+.messages-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.messages-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.messages-scroll::-webkit-scrollbar-thumb {
+  background: #7c3aed40;
+  border-radius: 999px;
+}
+
+.messages-scroll::-webkit-scrollbar-thumb:hover {
+  background: #7c3aed;
+}

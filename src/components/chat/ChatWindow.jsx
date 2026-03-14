@@ -1,40 +1,92 @@
 // ============================================================
 //  NEXCHAT — ChatWindow.jsx
-//  Message list + input + online count
+//  Message list + typing indicator + sound notifications
 //  Author  : Hassan Javed
 //  GitHub  : https://github.com/Hassanjaved17
 //  Built   : March 2026
 //  © 2026 Hassan Javed — All Rights Reserved
 // ============================================================
 
-import { useState, useEffect, useRef } from "react";
-import { Send, Hash, Globe, Loader2, Copy, Check, Menu, Users } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+    Send, Hash, Globe, Loader2,
+    Copy, Check, Menu, Users,
+} from "lucide-react";
 import MessageBubble from "./MessageBubble";
 import useMessages from "../../hooks/useMessages";
 import usePresence from "../../hooks/usePresence";
+import useTyping from "../../hooks/useTyping";
+import useNotification from "../../hooks/useNotification";
+
+// ── Typing dots animation ─────────────────────────────────────
+const TypingDots = () => (
+    <div className="flex items-center gap-1 px-1">
+        {[0, 1, 2].map((i) => (
+            <span
+                key={i}
+                className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce"
+                style={{ animationDelay: `${i * 0.15}s` }}
+            />
+        ))}
+    </div>
+);
 
 const ChatWindow = ({ room, user, onMenuOpen }) => {
-    const { messages, loading, sendMessage, deleteMessage } = useMessages(room?.id);
+    const { messages, loading, sendMessage, deleteMessage, toggleReaction } = useMessages(room?.id);
     const { onlineCount, onlineUsers } = usePresence(user, room?.id);
+    const { setTyping, stopTyping, getTypingText } = useTyping(user, room?.id);
+    const { playNotification, playSend } = useNotification();
+
     const [text, setText] = useState("");
     const [sending, setSending] = useState(false);
     const [copied, setCopied] = useState(false);
     const bottomRef = useRef(null);
+    const prevMsgCountRef = useRef(0);
+    const prevMsgIdsRef = useRef(new Set());
 
     // ── Auto scroll to bottom ─────────────────────────────────
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
+    // ── Play notification on new messages from others ─────────
+    useEffect(() => {
+        if (loading || messages.length === 0) return;
+
+        const currentIds = new Set(messages.map((m) => m.id));
+
+        // Find new messages
+        const newMessages = messages.filter(
+            (m) => !prevMsgIdsRef.current.has(m.id) && m.uid !== user?.uid
+        );
+
+        if (prevMsgIdsRef.current.size > 0 && newMessages.length > 0) {
+            playNotification();
+        }
+
+        prevMsgIdsRef.current = currentIds;
+        prevMsgCountRef.current = messages.length;
+    }, [messages, loading]);
+
     // ── Send message ──────────────────────────────────────────
     const handleSend = async (e) => {
         e.preventDefault();
         if (!text.trim() || sending) return;
         setSending(true);
+        await stopTyping();
         await sendMessage(text, user);
+        playSend();
         setText("");
         setSending(false);
     };
+
+    // ── Handle input change + typing indicator ────────────────
+    const handleInput = useCallback((e) => {
+        setText(e.target.value);
+        if (e.target.value.trim()) {
+            setTyping();
+        }
+    }, [setTyping]);
 
     // ── Send on Enter ─────────────────────────────────────────
     const handleKeyDown = (e) => {
@@ -51,6 +103,8 @@ const ChatWindow = ({ room, user, onMenuOpen }) => {
         setTimeout(() => setCopied(false), 2000);
     };
 
+    const typingText = getTypingText();
+
     if (!room) return (
         <div className="flex-1 flex items-center justify-center bg-[#0a0812]">
             <p className="text-gray-700 text-sm">Select a room to start chatting</p>
@@ -64,7 +118,6 @@ const ChatWindow = ({ room, user, onMenuOpen }) => {
             <div className="flex items-center justify-between px-5 py-4 border-b border-violet-900/30 bg-[#0d0917]">
                 <div className="flex items-center gap-3">
 
-                    {/* Mobile menu */}
                     <button
                         onClick={onMenuOpen}
                         className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:text-white hover:bg-violet-500/10 transition-all"
@@ -80,12 +133,9 @@ const ChatWindow = ({ room, user, onMenuOpen }) => {
                     </div>
                     <div>
                         <h2 className="text-white font-semibold text-sm">{room.name}</h2>
-                        {/* Online count */}
                         <div className="flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                            <p className="text-gray-500 text-xs">
-                                {onlineCount} online
-                            </p>
+                            <p className="text-gray-500 text-xs">{onlineCount} online</p>
                             {onlineCount > 1 && (
                                 <>
                                     <span className="text-gray-700 text-xs">·</span>
@@ -101,7 +151,6 @@ const ChatWindow = ({ room, user, onMenuOpen }) => {
                     </div>
                 </div>
 
-                {/* Copy room code */}
                 {!room.isGlobal && (
                     <button
                         onClick={copyRoomCode}
@@ -117,7 +166,7 @@ const ChatWindow = ({ room, user, onMenuOpen }) => {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-5 py-6 flex flex-col gap-4">
+            <div className="messages-scroll flex-1 overflow-y-auto px-5 py-6 flex flex-col gap-4">
                 {loading ? (
                     <div className="flex-1 flex items-center justify-center">
                         <Loader2 size={20} className="animate-spin text-violet-500" />
@@ -138,11 +187,23 @@ const ChatWindow = ({ room, user, onMenuOpen }) => {
                             key={msg.id}
                             message={msg}
                             isOwn={msg.uid === user.uid}
+                            userId={user.uid}
                             onDelete={deleteMessage}
+                            onReact={toggleReaction}
                         />
                     ))
                 )}
                 <div ref={bottomRef} />
+            </div>
+
+            {/* Typing indicator */}
+            <div className="px-6 h-6 flex items-center">
+                {typingText && (
+                    <div className="flex items-center gap-2">
+                        <TypingDots />
+                        <span className="text-gray-500 text-xs">{typingText}</span>
+                    </div>
+                )}
             </div>
 
             {/* Input */}
@@ -150,7 +211,7 @@ const ChatWindow = ({ room, user, onMenuOpen }) => {
                 <form onSubmit={handleSend} className="flex items-end gap-3">
                     <textarea
                         value={text}
-                        onChange={(e) => setText(e.target.value)}
+                        onChange={handleInput}
                         onKeyDown={handleKeyDown}
                         placeholder={`Message ${room.name}…`}
                         rows={1}
@@ -161,7 +222,7 @@ const ChatWindow = ({ room, user, onMenuOpen }) => {
                     <button
                         type="submit"
                         disabled={!text.trim() || sending}
-                        className="w-11 h-11 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:bg-violet-900 disabled:text-violet-700 text-white transition-all duration-300 flex items-center justify-center flex-shrink-0 shadow-lg shadow-violet-500/20"
+                        className="w-11 h-11 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:bg-violet-900 disabled:text-violet-700 text-white transition-all duration-300 flex items-center justify-center shrink-0 shadow-lg shadow-violet-500/20"
                     >
                         {sending
                             ? <Loader2 size={16} className="animate-spin" />

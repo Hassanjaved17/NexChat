@@ -1,21 +1,21 @@
 // ============================================================
 //  NEXCHAT — useMessages.js
-//  Realtime Database hook for messages
+//  Realtime Database hook — messages + reactions
 //  Author  : Hassan Javed
 //  GitHub  : https://github.com/Hassanjaved17
 //  Built   : March 2026
 //  © 2026 Hassan Javed — All Rights Reserved
 // ============================================================
 
-import { useState, useEffect }  from "react";
-import { db }                   from "../firebase/firebase";
+import { useState, useEffect } from "react";
+import { db } from "../firebase/firebase";
 import {
-  ref, push, remove, onValue, off, serverTimestamp,
+  ref, push, remove, set, onValue, off, serverTimestamp,
 } from "firebase/database";
 
 const useMessages = (roomId) => {
   const [messages, setMessages] = useState([]);
-  const [loading, setLoading]   = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!roomId) return;
@@ -29,8 +29,8 @@ const useMessages = (roomId) => {
         const parsed = Object.entries(data).map(([id, msg]) => ({
           id,
           ...msg,
+          reactions: msg.reactions ?? {},
         }));
-        // Sort by timestamp
         parsed.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
         setMessages(parsed);
       } else {
@@ -47,10 +47,11 @@ const useMessages = (roomId) => {
     if (!text.trim() || !roomId) return;
     const messagesRef = ref(db, `rooms/${roomId}/messages`);
     await push(messagesRef, {
-      text:        text.trim(),
-      uid:         user.uid,
+      text: text.trim(),
+      uid: user.uid,
       displayName: user.displayName || "Anonymous",
-      timestamp:   serverTimestamp(),
+      timestamp: serverTimestamp(),
+      reactions: {},
     });
   };
 
@@ -60,7 +61,24 @@ const useMessages = (roomId) => {
     await remove(msgRef);
   };
 
-  return { messages, loading, sendMessage, deleteMessage };
+  // ── Toggle reaction ───────────────────────────────────────
+  // Each emoji stores a map of uid → true
+  const toggleReaction = async (messageId, emoji, userId) => {
+    const reactionRef = ref(
+      db,
+      `rooms/${roomId}/messages/${messageId}/reactions/${emoji}/${userId}`
+    );
+    const message = messages.find((m) => m.id === messageId);
+    const hasReacted = message?.reactions?.[emoji]?.[userId];
+
+    if (hasReacted) {
+      await remove(reactionRef);
+    } else {
+      await set(reactionRef, true);
+    }
+  };
+
+  return { messages, loading, sendMessage, deleteMessage, toggleReaction };
 };
 
 export default useMessages;
